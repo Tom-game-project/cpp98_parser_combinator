@@ -1,4 +1,5 @@
 #include <cstddef>
+#include <iostream>
 #include <ostream>
 #include <string>
 #include <vector>
@@ -40,37 +41,65 @@ struct KeyValueNode;
 typedef std::vector<KeyValueNode*> BraceNode;
 
 struct KeyValueNode {
-    std::string key;
-    std::vector<std::string> values;
-    BraceNode brace_node;
+  std::string key;
+  std::vector<std::string> values;
+  BraceNode brace_node;
 
-    // ★パース失敗時に ParseResult が空の値を返すために必須！
-    KeyValueNode() {} 
+  // ★パース失敗時に ParseResult が空の値を返すために必須！
+  KeyValueNode() {} 
 };
 
-struct SemiToEmptyBrace {
-    // セミコロン(char) を無視して、空の配列を返す
-    BraceNode operator()(char /*c*/) const {
-        return BraceNode();
+void print_key_value_node (KeyValueNode* key_value_node, std::size_t depth) {
+  if (key_value_node == NULL) return ;
+
+  std::string depth_space(depth * 4, ' ');
+
+  std::cout << depth_space << "key [" << key_value_node->key << "]" << std::endl;
+  for (std::size_t j = 0; j < key_value_node->values.size(); j++) {
+    std::cout << depth_space << "value (" << j << ") "<< key_value_node->values[j] << std::endl;
+  }
+
+  if (!key_value_node->brace_node.empty()) {
+    std::cout << depth_space << "brace_node >> " << std::endl;
+    for (std::size_t i = 0; i < key_value_node->brace_node.size(); i++) {
+      print_key_value_node(key_value_node->brace_node[i], depth + 1);
     }
+  }
+}
+
+void free_key_value_node (KeyValueNode* key_value_node) {
+  if (key_value_node == NULL) return ;
+  for (std::size_t i = 0; i < key_value_node->brace_node.size(); i++) {
+    free_key_value_node(key_value_node->brace_node[i]);
+  }
+  delete key_value_node;
+}
+
+struct SemiToEmptyBrace {
+  // セミコロン(char) を無視して、空の配列を返す
+  BraceNode operator()(char /*c*/) const {
+    return BraceNode();
+  }
 };
 
 struct BuildNode {
-    typedef
-      std::pair< 
-        std::pair<
-          std::string, std::vector<std::string> 
-        >,
-        BraceNode 
-      > InputTree;
+  typedef
+    std::pair< 
+      std::pair<
+        std::string, std::vector<std::string> 
+      >,
+      BraceNode 
+    > InputTree;
 
-    KeyValueNode* operator()(const InputTree& p) const {
-        KeyValueNode* node = new KeyValueNode();
-        node->key = p.first.first;         // 左側の左側が key
-        node->values = p.first.second;     // 左側の右側が values
-        node->brace_node = p.second;       // 右側が terminator (BraceNode)
-        return node;
-    }
+  KeyValueNode* operator()(const InputTree& p) const {
+    KeyValueNode* node = new KeyValueNode();
+    node->key = p.first.first;         // 左側の左側が key
+    node->values = p.first.second;     // 左側の右側が values
+
+    node->brace_node = p.second;       // 右側が terminator (BraceNode)
+    
+    return node;
+  }
 };
 
 // 【重要】ASTを使い終わったらメモリを解放する関数
@@ -149,24 +178,17 @@ int main() {
         "server { \n"
         "  listen 80; \n"
         "  server_name localhost; \n"
-        "}";
+        "}\n"
+        "hello world;";
         
     std::string::const_iterator it = input.begin();
     std::string::const_iterator end = input.end();
-
-  // --- ユニットテスト：そもそも map_word は単語を読めるのか？ ---
-    ParseResult<std::string::const_iterator, std::string> test_res = map_word.parse(it, end);
-    std::cout << "テスト結果: " << (test_res.success ? "成功" : "失敗") << std::endl;
-    if (test_res.success) std::cout << "読んだ単語: " << test_res.value << std::endl;
-    // -----------------------------------------------------------
-
 
     ParseResult<std::string::const_iterator, BraceNode> res = config_parser.parse(it, end);
 
     if (res.success){
       for (std::size_t i = 0; i < res.value.size(); i++) {
         std::cout << res.value[i]->key <<std::endl;
-        // std::cout << res.value[i]-> <<std::endl;
       }
     }
 
@@ -175,10 +197,15 @@ int main() {
     // ★最強のデバッグ：パーサーがどこで立ち往生したかを見る
     std::cout << "停止位置の残りの文字列:\n--->" << std::string(res.next, end) << "<---" << std::endl;
 
-    if (res.success && res.value.size() > 0){
+    if (res.success) {
       for (std::size_t i = 0; i < res.value.size(); i++) {
-        std::cout << "Key: " << res.value[i]->key << std::endl;
+        std::cout << i << std::endl;
+        print_key_value_node(res.value[i], 0);
       }
+    }
+
+    for (std::size_t i = 0; i < res.value.size(); i++) {
+      free_key_value_node(res.value[i]);
     }
   }
 }
