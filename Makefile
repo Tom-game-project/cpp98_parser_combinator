@@ -1,5 +1,5 @@
 
-.PHONY: all examples example_csv
+.PHONY: all examples example_csv example_date
 
 CXX=c++
 CXX_FLAG= -Wall -Wextra -Werror -Wconversion -std=c++98 -pedantic-errors
@@ -12,3 +12,6 @@ examples:
 
 example_csv:
 	$(CXX) $(CXX_FLAG) example_csv.cpp
+
+example_date:
+	$(CXX) $(CXX_FLAG) example_yyyy-mm-dd.cpp

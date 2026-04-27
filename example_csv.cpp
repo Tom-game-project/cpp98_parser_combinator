@@ -183,7 +183,6 @@ int main () {
 
   CharParser<Iter> padded_char_set[] = {
       chr<std::string::const_iterator>(' '),
-      // chr<std::string::const_iterator>('\n'),
       chr<std::string::const_iterator>('\r'),
       chr<std::string::const_iterator>('\t')
   };
@@ -191,7 +190,7 @@ int main () {
   BrP br_p = many1(chr<Iter>('\n'));
   StringP comma_p = StringP(",");
   StringP empty_p = StringP("");
-  
+
   std::vector<CharParser<Iter> > value_char_set = generate_word_char();
   SomeCharP value_char_p = choice(value_char_set);
   WordP value_word_p = many(value_char_p);
@@ -210,8 +209,8 @@ int main () {
   ManyPaddedWordCharBrP many_padded_word_char_br_p = thenignore_p(many_padded_word_char_m, br_p);
 
   OptionRow0M option_row_0_m = map_p<Option<Row> >(many_padded_word_char_br_p, RowToOptionRow());
-  OptionRow1M option_row_1_m = map_p<Option<Row> >(many_padded_word_char_m, RowToOptionRow());
-  OptionRow2M option_row_2_m = map_p<Option<Row> >(empty_p, StringToOptionRow());
+  OptionRow1M option_row_1_m = map_p<Option<Row> >(many_padded_word_char_m   , RowToOptionRow());
+  OptionRow2M option_row_2_m = map_p<Option<Row> >(empty_p                   , StringToOptionRow());
 
   RowOrNoneP row_or_none_p = option_row_0_m | option_row_1_m | option_row_2_m;
 
@@ -222,9 +221,8 @@ int main () {
 
   std::string input = 
     "   hello , world      , Tom   \n"
-    "   hello , world      , Tom   \n"
-    "   hello , world      , Tom   "
-  ;
+    "   a , b      , d,e   \n \n"
+    "   hello , world      , Tom   ";
   Iter it = input.begin();
   Iter end = input.end();
   ParseResult<Iter, CsvData> parse_result = csv_m.parse(it, end);
