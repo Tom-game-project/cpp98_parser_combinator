@@ -219,6 +219,23 @@ struct ChoiceParser {
   }
 };
 
+template <typename Parser, std::size_t N>
+struct FixedChoiceParser {
+  typedef typename Parser::value_type value_type;
+  Parser ps[N];
+
+  FixedChoiceParser(std::vector<Parser> ps): ps(ps) {}
+
+  template<typename Iterator>
+  ParseResult<Iterator, value_type> parse(Iterator it, Iterator end) const {
+    for (std::size_t i = 0; i < N; i++) {
+      ParseResult<Iterator, value_type> res = this->ps[i].parse(it, end);
+      if (res.success) return res;
+    }
+    return ParseResult<Iterator, value_type>(false, value_type(), it);
+  }
+};
+
 template <typename Parser1, typename Parser2>
 struct ThenParser {
   typedef std::pair<typename Parser1::value_type, typename Parser2::value_type>  value_type;
@@ -405,7 +422,7 @@ struct MapParser {
       OutValueT mapped_value = f(res.value);
       return ParseResult<Iterator, OutValueT>(true, mapped_value, res.next);
     }
-    
+
     return ParseResult<Iterator, OutValueT>(false, OutValueT(), it);
   }
 };
@@ -436,6 +453,11 @@ ChoiceParser<P> choice(const P (&arr)[N]) {
 template <typename P>
 ChoiceParser<P> choice(std::vector<P> ps) {
   return ChoiceParser<P>(ps);
+}
+
+template <typename P, std::size_t N> 
+FixedChoiceParser<P, N> fixedchoice(P ps[N]) {
+  return FixedChoiceParser<P, N>(ps);
 }
 
 template <typename Parser>

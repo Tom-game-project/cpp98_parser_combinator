@@ -220,8 +220,8 @@ int main () {
   // ==========================================================================
 
   std::string input = 
-    "   hello , world      , Tom   \n"
-    "   a , b      , d,e   \n \n"
+    ",   hello , world      , Tom   \n"
+    "   a ,  , b      , d,e   \n \n"
     "   hello , world      , Tom   ";
   Iter it = input.begin();
   Iter end = input.end();

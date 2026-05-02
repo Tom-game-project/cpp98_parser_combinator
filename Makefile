@@ -15,3 +15,7 @@ example_csv:
 
 example_date:
 	$(CXX) $(CXX_FLAG) example_yyyy-mm-dd.cpp
+
+example_nginx:
+	$(CXX) $(CXX_FLAG) example_nginx_config.cpp
+

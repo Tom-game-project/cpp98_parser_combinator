@@ -119,7 +119,7 @@ int main() {
   typedef std::string::const_iterator Iter;
   // typedef StringParser<Iter> StringP;
   typedef CharParser<Iter> CharP;
-  typedef ChoiceParser<CharP> AnyCharP;
+  typedef FixedChoiceParser<CharP, 10> AnyCharP;
   typedef ThenParser<AnyCharP, AnyCharP> CharCharP;
   typedef CharCharP MonthP;  // MM
 
@@ -157,7 +157,7 @@ int main() {
   };
 
   CharP sep_p = CharP('-');
-  AnyCharP number_p = choice(num_set);
+  AnyCharP number_p = fixedchoice<CharP, 10>(num_set);
 
   YearP year_p = number_p & number_p & number_p & number_p;
   YearM year_m = map_p<YearT>(year_p, YearMap());
@@ -170,7 +170,8 @@ int main() {
 
   TimeStampFormatM time_stamp_format_m = map_p<Result<Date, FailedReason::FailedReason> >(time_stamp_format_p, ToDate());
 
-  std::string input = "2026-04-27";
+  std::string input = "2026-02-29";
+  // std::string input = "2026-04-27";
   Iter it = input.begin();
   Iter end = input.end();
   ParseResult<Iter, Result<Date, FailedReason::FailedReason> > parsed_date = time_stamp_format_m.parse(it, end);

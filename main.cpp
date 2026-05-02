@@ -29,22 +29,6 @@ struct VecCharToString {
   }
 };
 
-// struct ReadingBuff {
-//   enum DataType {
-//     Block,
-//     None
-//   } data_type;
-//   BraceNode brace_node;
-// 
-//   ReadingBuff(): data_type(DataType::None), brace_node(BraceNode()) {}
-// };
-
-// struct 
-
-// struct LineToKeyValueNode {
-//   KeyValueNode operator()(const std::pair<typename T1, typename T2>)
-// }
-
 struct SampleStruct {
   std::string key;
   std::vector<std::string> values;
