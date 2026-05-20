@@ -121,7 +121,17 @@ ParseResult<std::string::const_iterator, BraceNode> nginx_like_config_parser(std
   typedef std::string::const_iterator Iter;
   typedef ChoiceParser<CharParser<Iter > > SomeChar;
   typedef Many1Parser<SomeChar> Word;
-  typedef ManyParser<SomeChar> Padded;
+
+  typedef 
+    ThenIgnoreParser< 
+      IgnoreThenParser<
+      ManyParser<AnyCharExcludeParser<StringParser<Iter>, 1>/* comment close */>,
+      StringParser<Iter> > /* comment open */,
+    StringParser<Iter> > /*comment close*/
+   CommentBlockP;
+
+  typedef ManyParser<OrParser<CommentBlockP, ManyParser<SomeChar> > > Padded;
+
   typedef PaddedParser<Word, Padded> PaddedWord;
   typedef MapParser<PaddedWord, VecCharToString, std::string> MapWord;
 
@@ -141,8 +151,10 @@ ParseResult<std::string::const_iterator, BraceNode> nginx_like_config_parser(std
       PaddedParser<CharParser<Iter>, Padded> >,
     PaddedParser<CharParser<Iter>, Padded> >, 
   Padded> BlockP;
+
   typedef PaddedParser<OrParser<SemiP, BlockP>, Padded> SemiOrBlockP;
-  typedef ManyParser<RefParser<NodeP> > ConfigP;
+  typedef 
+    ThenIgnoreParser<ManyParser<RefParser<NodeP> >, EofParser<Iter> > ConfigP;
 
   NodeP node_rule;
 
@@ -155,7 +167,16 @@ ParseResult<std::string::const_iterator, BraceNode> nginx_like_config_parser(std
 
   std::vector<CharParser<Iter> > word_char= generate_word_char() /*a-z A-Z 0-9 -_*/;
   Word some_word = many1(choice(word_char));
-  Padded padded_set = many(choice(padded_char));
+
+  StringParser<Iter> comment_exclude[] = {str<Iter>("\n")};
+  CommentBlockP comment_block_p = thenignore_p(
+      ignorethen_p(
+        many(any_exclude_p(comment_exclude)),
+        str<Iter>("#")
+      ), 
+      str<Iter>("\n"));
+
+  Padded padded_set = many(comment_block_p | many(choice(padded_char)) /* manyが必ず成功してしまうため最後 */);
 
   PaddedWord padded_word = padded_p(some_word, padded_set);
   MapWord map_word = map_p<std::string>(padded_word, VecCharToString());
@@ -186,7 +207,8 @@ ParseResult<std::string::const_iterator, BraceNode> nginx_like_config_parser(std
       BuildNode()
     );
 
-  ConfigP config_parser = many(ref_p(node_rule));
+  ConfigP config_parser = 
+    thenignore_p(many(ref_p(node_rule)), eof_p<Iter>());
 
   Iter it = input.begin();
   Iter end = input.end();
@@ -200,7 +222,7 @@ int main() {
   {
     std::string input = 
         "server { \n"
-        "  listen 80; \n"
+        "  listen 80; # こんにちは\n"
         "  server_name localhost; \n"
         "}\n"
         "hello world;";

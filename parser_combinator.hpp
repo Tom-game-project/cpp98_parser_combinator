@@ -56,6 +56,8 @@ struct StringParser {
   typedef std::string value_type;
   std::string target;
   
+  StringParser() : target("") {}
+
   StringParser(std::string s) : target(s) {}
 
   ParseResult<Iterator, std::string> parse(Iterator it, Iterator end) const {
@@ -235,6 +237,47 @@ struct FixedChoiceParser {
     return ParseResult<Iterator, value_type>(false, value_type(), it);
   }
 };
+
+template <typename Parser, std::size_t N>
+struct AnyCharExcludeParser {
+  typedef char value_type;
+  
+  Parser ps[N];
+
+  AnyCharExcludeParser() {}
+
+  AnyCharExcludeParser(const Parser (&arr)[N]) {
+    for (std::size_t i = 0; i < N; ++i) {
+      this->ps[i] = arr[i];
+    }
+  }
+
+  template<typename Iterator>
+  ParseResult<Iterator, value_type> parse(Iterator it, Iterator end) const {
+    if (it == end) {
+      return ParseResult<Iterator, value_type>(false, value_type(), it);
+    }
+
+    for (std::size_t i = 0; i < N; ++i) {
+      ParseResult<Iterator, typename Parser::value_type> res = this->ps[i].parse(it, end);
+      
+      if (res.success) {
+        return ParseResult<Iterator, value_type>(false, value_type(), it);
+      }
+    }
+
+    value_type val = *it;
+    Iterator next_it = it;
+    ++next_it;
+
+    return ParseResult<Iterator, value_type>(true, val, next_it);
+  }
+};
+
+template <typename Parser, std::size_t N>
+AnyCharExcludeParser<Parser, N> any_exclude_p(const Parser (&arr)[N]) {
+  return AnyCharExcludeParser<Parser, N>(arr);
+}
 
 template <typename Parser1, typename Parser2>
 struct ThenParser {
