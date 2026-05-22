@@ -78,7 +78,7 @@ int main() {
     Word word_hello = str<std::string::const_iterator>("hello");
     Word word_world = str<std::string::const_iterator>("world");
 
-    HELLOorWORLD hello_or_world = word_hello | word_world;
+    HELLOorWORLD hello_or_world = or_p(word_hello, word_world);
 
     // (chr('a') | chr('b')).parse(...) と書く
     ParseResult<std::string::const_iterator, std::string> res = 
@@ -105,7 +105,7 @@ int main() {
     std::string::const_iterator it = input.begin();
     std::string::const_iterator end = input.end();
 
-    HELLOthenWORLD hello_then_workd = word_hello & word_world;
+    HELLOthenWORLD hello_then_workd = then_p(word_hello, word_world);
     ParseResult<std::string::const_iterator, std::pair<std::string, std::string> > res = 
         hello_then_workd.parse(it, end);
 
@@ -155,7 +155,7 @@ int main() {
 
     // Key Values
 
-    MappedPair pair = map_p<SampleStruct>(map_word & many(map_word), PairToSampleStruct());
+    MappedPair pair = map_p<SampleStruct>(then_p(map_word, many(map_word)), PairToSampleStruct());
 
     // rec_block = chr<std::string::const_iterator>('{') & rec_block & chr<std::string::const_iterator>('}') ;
 

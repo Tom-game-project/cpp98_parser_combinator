@@ -159,14 +159,14 @@ int main() {
   CharP sep_p = CharP('-');
   AnyCharP number_p = fixedchoice<CharP, 10>(num_set);
 
-  YearP year_p = number_p & number_p & number_p & number_p;
+  YearP year_p = then_p(then_p(then_p(number_p, number_p), number_p), number_p);
   YearM year_m = map_p<YearT>(year_p, YearMap());
 
-  CharCharP numnum_p = number_p & number_p;
+  CharCharP numnum_p = then_p(number_p, number_p);
   MonthM month_m = map_p<MonthT>(numnum_p, MonthMap());
   DayM day_m = map_p<DayT>(numnum_p, DayMap());
 
-  TimeStampFormatP time_stamp_format_p = thenignore_p(thenignore_p(year_m, sep_p) & month_m/*month_p*/, sep_p) & day_m /*day_p*/;
+  TimeStampFormatP time_stamp_format_p = then_p(thenignore_p(then_p(thenignore_p(year_m, sep_p), month_m)/*month_p*/, sep_p), day_m) /*day_p*/;
 
   TimeStampFormatM time_stamp_format_m = map_p<Result<Date, FailedReason::FailedReason> >(time_stamp_format_p, ToDate());
 

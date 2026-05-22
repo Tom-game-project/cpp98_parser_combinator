@@ -176,7 +176,7 @@ ParseResult<std::string::const_iterator, BraceNode> nginx_like_config_parser(std
       ), 
       str<Iter>("\n"));
 
-  Padded padded_set = many(comment_block_p | many(choice(padded_char)) /* manyが必ず成功してしまうため最後 */);
+  Padded padded_set = many(or_p(comment_block_p , many(choice(padded_char))) /* manyが必ず成功してしまうため最後 */);
 
   PaddedWord padded_word = padded_p(some_word, padded_set);
   MapWord map_word = map_p<std::string>(padded_word, VecCharToString());
@@ -198,12 +198,12 @@ ParseResult<std::string::const_iterator, BraceNode> nginx_like_config_parser(std
     padded_set);
 
   // 終端記号は、semiまたはblock(型はどちらも BraceNode に揃える)
-  SemiOrBlockP terminator = padded_p(semi | block, padded_set);
+  SemiOrBlockP terminator = padded_p(or_p(semi, block), padded_set);
 
   // key & values & terminator を結合し、BuildNode でポインタに変換する
   node_rule = map_p<KeyValueNode*>(
       padded_p(
-        map_word & many(map_word) & terminator, padded_set),
+        then_p(then_p(map_word, many(map_word)), terminator), padded_set),
       BuildNode()
     );
 

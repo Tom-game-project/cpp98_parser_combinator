@@ -201,10 +201,10 @@ int main () {
   PaddedWordP padded_word_p = padded_p(value_word_m, padded_char_p);
   PaddedWordCharP padded_word_char_p = thenignore_p(padded_word_p, comma_p);
 
-  StringOrNoneP string_or_none_p = padded_word_char_p | padded_word_p | empty_p;
+  StringOrNoneP string_or_none_p = or_p(or_p(padded_word_char_p , padded_word_p), empty_p);
   StringOrNoneM string_or_none_m = map_p<Option<std::string> >(string_or_none_p, StringToOption());
 
-  ManyPaddedWordCharP many_padded_word_char_p = thenignore_p(many(padded_word_char_p) & string_or_none_m, padded_char_p);
+  ManyPaddedWordCharP many_padded_word_char_p = thenignore_p(then_p(many(padded_word_char_p) , string_or_none_m), padded_char_p);
   ManyPaddedWordCharM many_padded_word_char_m = map_p<Row>(many_padded_word_char_p, DataToRow());
   ManyPaddedWordCharBrP many_padded_word_char_br_p = thenignore_p(many_padded_word_char_m, br_p);
 
@@ -212,9 +212,9 @@ int main () {
   OptionRow1M option_row_1_m = map_p<Option<Row> >(many_padded_word_char_m   , RowToOptionRow());
   OptionRow2M option_row_2_m = map_p<Option<Row> >(empty_p                   , StringToOptionRow());
 
-  RowOrNoneP row_or_none_p = option_row_0_m | option_row_1_m | option_row_2_m;
+  RowOrNoneP row_or_none_p = or_p(or_p(option_row_0_m , option_row_1_m), option_row_2_m);
 
-  CsvP csv_p = many(many_padded_word_char_br_p) & row_or_none_p;
+  CsvP csv_p = then_p(many(many_padded_word_char_br_p), row_or_none_p);
   CsvM csv_m = map_p<CsvData>(csv_p, DataToCsv());
 
   // ==========================================================================

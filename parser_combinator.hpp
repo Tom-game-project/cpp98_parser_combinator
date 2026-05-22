@@ -486,13 +486,25 @@ MapParser<ParserT, FuncT, OutValueT> map_p(const ParserT& p, FuncT f) {
     return MapParser<ParserT, FuncT, OutValueT>(p, f);
 }
 
+// 衝突しやすいので削除
+// template <typename P1, typename P2>
+// OrParser<P1, P2> operator|(const P1& p1, const P2& p2) {
+//   return OrParser<P1, P2>(p1, p2);
+// }
+
 template <typename P1, typename P2>
-OrParser<P1, P2> operator|(const P1& p1, const P2& p2) {
+OrParser<P1, P2> or_p(const P1& p1, const P2& p2) {
   return OrParser<P1, P2>(p1, p2);
 }
 
+// 衝突しやすいので削除
+// template <typename P1, typename P2>
+// ThenParser<P1, P2> operator&(const P1& p1, const P2& p2) {
+//   return ThenParser<P1, P2>(p1, p2);
+// }
+
 template <typename P1, typename P2>
-ThenParser<P1, P2> operator&(const P1& p1, const P2& p2) {
+ThenParser<P1, P2> then_p(const P1& p1, const P2& p2) {
   return ThenParser<P1, P2>(p1, p2);
 }
 
