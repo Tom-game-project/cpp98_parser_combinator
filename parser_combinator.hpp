@@ -226,7 +226,13 @@ struct FixedChoiceParser {
   typedef typename Parser::value_type value_type;
   Parser ps[N];
 
-  FixedChoiceParser(std::vector<Parser> ps): ps(ps) {}
+  // FixedChoiceParser(Parser ps[N]): ps(ps) {}
+  FixedChoiceParser(const Parser (&arr)[N]) {
+  // 初期化子リストは使わず、forループで1つずつ安全にコピーする
+    for (std::size_t i = 0; i < N; ++i) {
+      this->ps[i] = arr[i];
+    }
+  }
 
   template<typename Iterator>
   ParseResult<Iterator, value_type> parse(Iterator it, Iterator end) const {
