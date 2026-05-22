@@ -505,7 +505,7 @@ ChoiceParser<P> choice(std::vector<P> ps) {
 }
 
 template <typename P, std::size_t N> 
-FixedChoiceParser<P, N> fixedchoice(P ps[N]) {
+FixedChoiceParser<P, N> fixedchoice(const P (&ps)[N]) {
   return FixedChoiceParser<P, N>(ps);
 }
 
