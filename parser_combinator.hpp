@@ -41,6 +41,9 @@ template <typename Iterator>
 struct CharParser {
   typedef char value_type;
   char target;
+
+  CharParser() : target('\0') {}
+
   CharParser(char c) : target(c) {}
 
   ParseResult<Iterator, char> parse(Iterator it, Iterator end) const {
