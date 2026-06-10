@@ -36,7 +36,6 @@ struct EofParser {
   }
 };
 
-
 template <typename Iterator>
 struct CharParser {
   typedef char value_type;
@@ -48,6 +47,26 @@ struct CharParser {
 
   ParseResult<Iterator, char> parse(Iterator it, Iterator end) const {
     if (it != end /*終端に到達しておらず*/ && *it == this->target /*target文字列にマッチしている*/) {
+      return ParseResult<Iterator, value_type>(true, *it, it + 1);
+    }
+    return ParseResult<Iterator, value_type>(false, '\0', it);
+  }
+};
+
+//
+// 述語ベースの一文字parser
+//
+template <typename Iterator>
+struct PredicateCharParser {
+  typedef char value_type;
+
+  typedef bool (*FuncT)(char);
+  FuncT f;
+
+  PredicateCharParser(FuncT f /* bool f(char) */) : f(f) {}
+
+  ParseResult<Iterator, char> parse(Iterator it, Iterator end) const {
+    if (it != end /*終端に到達しておらず*/ && this->f(*it) /* functorの条件にmatchする*/) {
       return ParseResult<Iterator, value_type>(true, *it, it + 1);
     }
     return ParseResult<Iterator, value_type>(false, '\0', it);
