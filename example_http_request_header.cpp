@@ -1,9 +1,14 @@
+// https://www.rfc-editor.org/rfc/rfc9112.html#header.field.syntax
+// https://www.rfc-editor.org/rfc/rfc9112.html#name-field-line-parsing
+
 #include "parser_combinator.hpp"
+#include <cassert>
 #include <cctype>
 #include <cstddef>
 #include <string>
 #include <utility>
 #include <vector>
+#include <iostream>
 
 // 
 // functor
@@ -43,16 +48,8 @@ struct WordLineToRequestLine {
   }
 };
 
-//  typedef 
-//    ThenParser<
-//      PSomeCharP,   // field-vchar
-//      ManyParser<OrParser<
-//        PSomeCharP, // SP | HTAB
-//        PSomeCharP  // field-vchar
-//      > > >
-//     FieldContentP;
 struct FieldContentPToString {
-  std::string operator()(const std::pair<char, std::vector<char>> v) const {
+  std::string operator()(const std::pair<char, std::vector<char> > v) const {
     std::string rstr;
     std::string tail(v.second.begin(), v.second.end());
 
@@ -72,11 +69,23 @@ struct FieldValuePToString {
   }
 };
 
+struct OptionalTailToVecChar {
+  std::vector<char> operator() (const std::vector<std::pair<std::vector<char>, char> > v) const {
+    std::vector<char> rvec;
+
+    for (std::size_t i = 0; i < v.size(); i++) {
+      rvec.insert(rvec.end(), v[i].first.begin(), v[i].first.end());
+      rvec.push_back(v[i].second);
+    }
+    return rvec;
+  }
+};
+
 // char functor
 
 bool is_field_vchar(const char c) {
   unsigned char uc = static_cast<unsigned char>(c);
-  return (uc >= 0x21 && uc <= 0x7E) || (uc >= 0x80 && uc <= 0xFF /* obs-text */);
+  return (uc >= 0x21 && uc <= 0x7E) || (uc >= 0x80/* obs-text */);
 }
 
 bool is_ows(const char c) {
@@ -97,21 +106,21 @@ bool is_tchar(const char c) {
   return 
     std::isdigit(c) != 0 ||
     std::isalpha(c) != 0 ||
-    c == '!' ||
-    c == '#' ||
-    c == '$' ||
-    c == '%' ||
-    c == '&' ||
-    c == '\'' ||
-    c == '*' ||
-    c == '+' ||
-    c == '-' ||
-    c == '.' ||
-    c == '^' ||
-    c == '_' ||
-    c == '`' ||
-    c == '|'||
-    c == '~';
+    uc == '!' ||
+    uc == '#' ||
+    uc == '$' ||
+    uc == '%' ||
+    uc == '&' ||
+    uc == '\'' ||
+    uc == '*' ||
+    uc == '+' ||
+    uc == '-' ||
+    uc == '.' ||
+    uc == '^' ||
+    uc == '_' ||
+    uc == '`' ||
+    uc == '|'||
+    uc == '~';
 }
 
 //
@@ -125,10 +134,20 @@ int main () {
     "\n"
     "name=FirstName+LastName&email=bsmth%40example.com\n";
 
+  std::string request_header_fields = 
+    "Host: example.com\n"
+    "Content-Type: application/x-www-form-urlencoded\n"
+    "Content-Length: 49  \n"
+    "\n"
+    "name=FirstName+LastName&email=bsmth%40example.com\n";
+
+  std::string request_header_field = 
+    "Host: example.com\n";
+
   typedef std::string::const_iterator Iter;
   typedef CharParser<Iter> CharP;
-  typedef ChoiceParser<CharP> SomeChar;
-  typedef OrParser<StringParser<Iter>, StringParser<Iter>> CRLFP;
+  // typedef ChoiceParser<CharP> SomeChar;
+  typedef OrParser<StringParser<Iter>, StringParser<Iter> > CRLFP;
 
   // typedef 
   //
@@ -138,14 +157,35 @@ int main () {
   //                  [ 1*( SP / HTAB / field-vchar ) field-vchar ]
   // field-content
 
+// 概念的なC++コード
+// field_vchar_p が必ず最後に来るようにブロック化する
+// then_p(
+//     field_vchar_p, 
+//     many0(
+//         then_p(many0(ows_p), field_vchar_p)
+//     )
+// )
+
+  // ThenParser<Many1Parser<OrParser<PSomeCharP/*SP HTAB*/, PSomeCharP/*field-vchar*/> >, PSomeCharP/*field-vchar*/> 
   typedef 
     ThenParser<
       PSomeCharP,   // field-vchar
-      ManyParser<OrParser<
-        PSomeCharP, // SP | HTAB
-        PSomeCharP  // field-vchar
-      > > >
-     FieldContentP;
+      OptParser<
+        MapParser<
+          ManyParser<
+            ThenParser<
+              ManyParser<
+                PSomeCharP/*ows*/
+              >, 
+              PSomeCharP/* field vchar*/
+            > 
+          >,
+          OptionalTailToVecChar,
+          std::vector<char>
+        > 
+      >
+    >
+    FieldContentP;
 
   typedef MapParser<FieldContentP, FieldContentPToString, std::string> FieldContentM;
 
@@ -156,9 +196,9 @@ int main () {
   typedef MapParser<FieldNameP, VecCharToString, std::string> FieldNameM;
 
   //   field-line   = field-name ":" OWS field-value OWS
-  typedef ThenParser<ThenIgnoreParser<FieldNameM, CharP /*:*/>, PaddedParser<FieldValueM, PSomeCharP  /* OWS */ > > FieldLineP;
+  typedef ThenParser<ThenIgnoreParser<FieldNameM, CharP /*:*/>, PaddedParser<FieldValueM, ManyParser<PSomeCharP> /* OWS */ > > FieldLineP;
 
-  typedef ManyParser<ThenIgnoreParser<FieldLineP, CRLFP>> FieldLinesP;
+  typedef ThenIgnoreParser<ManyParser<ThenIgnoreParser<FieldLineP, CRLFP> >, CRLFP>  FieldLinesP;
 
   // HTTP-message = start-line CRLF *( field-line CRLF ) CRLF [ message-body ]
   // start-line = request-line / status-line
@@ -176,7 +216,7 @@ int main () {
   // HTTP-name     = %s"HTTP"
   typedef StringParser<Iter> HttpNameP;
 
-  typedef Many1Parser<PredicateCharParser<Iter>> DigitP;
+  typedef Many1Parser<PredicateCharParser<Iter> > DigitP;
   typedef MapParser<DigitP, VecCharToString, std::string> DigitM;
 
   typedef IgnoreThenParser<ThenParser<ThenIgnoreParser<DigitM, CharP/*.*/>, DigitM>, ThenParser<HttpNameP, CharP> > HttpVersionP;
@@ -197,10 +237,30 @@ int main () {
       then_p(thenignore_p(digit_m, CharP('.')), digit_m),
       then_p(http_name_p, CharP('/')));
 
-
+  OptParser<
+        MapParser<
+          ManyParser<
+            ThenParser<
+              ManyParser<
+                PSomeCharP/*ows*/
+              >, 
+              PSomeCharP/* field vchar*/
+            > 
+          >,
+          OptionalTailToVecChar,
+          std::vector<char>
+        > 
+    > tmp_p = 
+      opt_p(
+        map_p<std::vector<char> >(many(then_p(many(ows_p), field_vchar_p)),
+          OptionalTailToVecChar()
+        )
+      );
+  
   FieldContentP field_content_p = then_p(
       field_vchar_p,
-      many(or_p(ows_p, field_vchar_p)));
+      tmp_p
+  );
 
   FieldContentM field_content_m = map_p<std::string>(field_content_p, FieldContentPToString());
 
@@ -211,8 +271,101 @@ int main () {
   FieldNameM field_name_m = map_p<std::string>(field_name_p, VecCharToString()); // token
                                                                                        // methodとしても使える
 
-  FieldLineP field_line_p = then_p(thenignore_p(field_name_m, CharP(':')), padded_p(field_value_m, ows_p));
-  FieldLinesP field_lines_p = many(thenignore_p(field_line_p, crlf_p));
+  FieldLineP field_line_p = then_p(thenignore_p(field_name_m, CharP(':')), padded_p(field_value_m, many(ows_p)));
+  FieldLinesP field_lines_p = 
+    thenignore_p(many(thenignore_p(field_line_p, crlf_p)), crlf_p);
 
+  // --- test ---
 
+  {
+    std::cout << "--- test field_lines_p ---" << std::endl;
+    Iter it = request_header_fields.begin();
+    Iter end = request_header_fields.end();
+    ParseResult<Iter, std::vector<std::pair<std::string, std::string> > > res = field_lines_p.parse(it, end);
+
+    if (res.success) {
+      for (std::size_t i = 0; i < res.value.size(); i++) {
+        std::pair<std::string, std::string> pair = res.value[i];
+        std::cout << "\"" << pair.first << "\"" << ": " << "\"" << pair.second << "\"" << std::endl;
+      }
+    } else {
+      std::cout << "failed to parse" << std::endl;
+    }
+  }
+
+  {
+    std::cout << "--- test: field_line_p ---" << std::endl;
+    Iter it = request_header_field.begin();
+    Iter end = request_header_field.end();
+    ParseResult<Iter, std::pair<std::string, std::string> > res = field_line_p.parse(it, end);
+
+    if (res.success) {
+      std::cout << "\"" << res.value.first << "\"" << ": " << "\"" << res.value.second << "\"" << std::endl;
+    } else {
+      std::cout << "failed to parse" << std::endl;
+    }
+  }
+
+  {
+    std::cout << "--- test: field_name_m ---" << std::endl;
+    std::string field_name_string = "Hello";
+    Iter it = field_name_string.begin();
+    Iter end = field_name_string.end();
+    ParseResult<Iter, std::string > res = field_name_m.parse(it, end);
+
+    if (res.success) {
+      std::cout << res.value << std::endl;
+    } else {
+      std::cout << "failed to parse" << std::endl;
+    }
+  }
+
+  {
+    std::cout << "--- test: field_value_m ---" << std::endl;
+    std::string field_value_string = "example.com  aaaaa   ";
+    Iter it = field_value_string.begin();
+    Iter end = field_value_string.end();
+    ParseResult<Iter, std::string > res = field_value_m.parse(it, end);
+
+    if (res.success) {
+      std::cout << "\"" << res.value << "\"" << std::endl;
+    } else {
+      std::cout << "failed to parse" << std::endl;
+    }
+  }
+
+  {
+    std::cout << "--- test: field_content_p ---" << std::endl;
+    std::string field_value_string = "exa";
+    Iter it = field_value_string.begin();
+    Iter end = field_value_string.end();
+    ParseResult<Iter, std::pair<char, std::vector<char> > > res = field_content_p.parse(it, end);
+
+    if (res.success) {
+      std::cout << res.value.first << std::endl;
+      std::string s(res.value.second.begin(), res.value.second.end());
+      std::cout << "\"" << s << "\"" << std::endl;
+    } else {
+      std::cout << "failed to parse" << std::endl;
+    }
+  }
+
+  {
+    std::cout << "--- test: tmp_p ---" << std::endl;
+    std::string field_value_string = "hello";
+    Iter it = field_value_string.begin();
+    Iter end = field_value_string.end();
+    ParseResult<Iter, std::vector<char> > res = tmp_p.parse(it, end);
+
+    if (res.success) {
+      std::string s(res.value.begin(), res.value.end());
+      std::cout << s << std::endl;
+    } else {
+      std::cout << "failed to parse" << std::endl;
+    }
+
+  }
+  assert(is_field_vchar('H'));
+  assert(is_field_vchar('h'));
+  assert(is_field_vchar('.'));
 }

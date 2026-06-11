@@ -498,6 +498,30 @@ struct MapParser {
   }
 };
 
+template <typename ParserT>
+struct OptParser {
+  typedef typename ParserT::value_type value_type;
+  ParserT p;
+
+  OptParser(const ParserT& parser): p(parser) {}
+
+  template<typename Iterator>
+  ParseResult<Iterator, value_type>parse(Iterator it, Iterator end) const {
+    ParseResult<Iterator, typename ParserT::value_type> res = p.parse(it, end);
+
+    if (res.success) {
+      return ParseResult<Iterator, value_type>(true, res.value, res.next);
+    }
+
+    return ParseResult<Iterator, value_type>(true, value_type(), it);
+  } 
+};
+
+template <typename ParserT> 
+OptParser<ParserT> opt_p(const ParserT& p) {
+  return OptParser<ParserT>(p);
+}
+
 // 使いやすくするためのヘルパー関数
 // ※C++98では変換後の型 OutValueT だけは手動で指定する必要があります
 template <typename OutValueT, typename ParserT, typename FuncT>
@@ -505,22 +529,10 @@ MapParser<ParserT, FuncT, OutValueT> map_p(const ParserT& p, FuncT f) {
     return MapParser<ParserT, FuncT, OutValueT>(p, f);
 }
 
-// 衝突しやすいので削除
-// template <typename P1, typename P2>
-// OrParser<P1, P2> operator|(const P1& p1, const P2& p2) {
-//   return OrParser<P1, P2>(p1, p2);
-// }
-
 template <typename P1, typename P2>
 OrParser<P1, P2> or_p(const P1& p1, const P2& p2) {
   return OrParser<P1, P2>(p1, p2);
 }
-
-// 衝突しやすいので削除
-// template <typename P1, typename P2>
-// ThenParser<P1, P2> operator&(const P1& p1, const P2& p2) {
-//   return ThenParser<P1, P2>(p1, p2);
-// }
 
 template <typename P1, typename P2>
 ThenParser<P1, P2> then_p(const P1& p1, const P2& p2) {
