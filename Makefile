@@ -21,3 +21,7 @@ example_nginx:
 
 example_http:
 	$(CXX) $(CXX_FLAG) example_http_request_header.cpp
+
+example_uri:
+	$(CXX) $(CXX_FLAG) example_uri.cpp
+

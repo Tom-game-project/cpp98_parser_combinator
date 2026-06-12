@@ -16,7 +16,7 @@
 
 // std::vector<char>をstd::stringにする関数
 struct VecCharToString {
-  std::string operator()(const std::vector<char> v) const {
+  std::string operator()(const std::vector<char>& v) const {
     std::string s(v.begin(), v.end());
     return s;
   }
@@ -94,7 +94,7 @@ bool is_ows(const char c) {
 }
 
 bool is_digit(const char c) {
-  return std::isdigit(c);
+  return std::isdigit(static_cast<unsigned char>(c));
 }
 
 // ```
@@ -123,6 +123,8 @@ bool is_tchar(const char c) {
     uc == '~';
 }
 
+
+
 //
 int main () {
 
@@ -146,27 +148,13 @@ int main () {
 
   typedef std::string::const_iterator Iter;
   typedef CharParser<Iter> CharP;
-  // typedef ChoiceParser<CharP> SomeChar;
   typedef OrParser<StringParser<Iter>, StringParser<Iter> > CRLFP;
 
-  // typedef 
-  //
   typedef PredicateCharParser<Iter> PSomeCharP; // 関数で条件設定できる一文字
 
   //   field-content  = field-vchar
   //                  [ 1*( SP / HTAB / field-vchar ) field-vchar ]
-  // field-content
 
-// 概念的なC++コード
-// field_vchar_p が必ず最後に来るようにブロック化する
-// then_p(
-//     field_vchar_p, 
-//     many0(
-//         then_p(many0(ows_p), field_vchar_p)
-//     )
-// )
-
-  // ThenParser<Many1Parser<OrParser<PSomeCharP/*SP HTAB*/, PSomeCharP/*field-vchar*/> >, PSomeCharP/*field-vchar*/> 
   typedef 
     ThenParser<
       PSomeCharP,   // field-vchar
@@ -237,29 +225,13 @@ int main () {
       then_p(thenignore_p(digit_m, CharP('.')), digit_m),
       then_p(http_name_p, CharP('/')));
 
-  OptParser<
-        MapParser<
-          ManyParser<
-            ThenParser<
-              ManyParser<
-                PSomeCharP/*ows*/
-              >, 
-              PSomeCharP/* field vchar*/
-            > 
-          >,
-          OptionalTailToVecChar,
-          std::vector<char>
-        > 
-    > tmp_p = 
+  FieldContentP field_content_p = then_p(
+      field_vchar_p,
       opt_p(
         map_p<std::vector<char> >(many(then_p(many(ows_p), field_vchar_p)),
           OptionalTailToVecChar()
         )
-      );
-  
-  FieldContentP field_content_p = then_p(
-      field_vchar_p,
-      tmp_p
+      )
   );
 
   FieldContentM field_content_m = map_p<std::string>(field_content_p, FieldContentPToString());
@@ -350,21 +322,6 @@ int main () {
     }
   }
 
-  {
-    std::cout << "--- test: tmp_p ---" << std::endl;
-    std::string field_value_string = "hello";
-    Iter it = field_value_string.begin();
-    Iter end = field_value_string.end();
-    ParseResult<Iter, std::vector<char> > res = tmp_p.parse(it, end);
-
-    if (res.success) {
-      std::string s(res.value.begin(), res.value.end());
-      std::cout << s << std::endl;
-    } else {
-      std::cout << "failed to parse" << std::endl;
-    }
-
-  }
   assert(is_field_vchar('H'));
   assert(is_field_vchar('h'));
   assert(is_field_vchar('.'));

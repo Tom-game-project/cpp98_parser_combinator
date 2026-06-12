@@ -63,7 +63,7 @@ struct PredicateCharParser {
   typedef bool (*FuncT)(char);
   FuncT f;
 
-  PredicateCharParser(FuncT f /* bool f(char) */) : f(f) {}
+  PredicateCharParser(const FuncT f /* bool f(char) */) : f(f) {}
 
   ParseResult<Iterator, char> parse(Iterator it, Iterator end) const {
     if (it != end /*終端に到達しておらず*/ && this->f(*it) /* functorの条件にmatchする*/) {
@@ -72,6 +72,11 @@ struct PredicateCharParser {
     return ParseResult<Iterator, value_type>(false, '\0', it);
   }
 };
+
+template <typename Iterator>
+PredicateCharParser<Iterator> pred_p(bool (*f)(char)) {
+  return PredicateCharParser<Iterator>(f);
+}
 
 template <typename Iterator>
 struct StringParser {
@@ -478,7 +483,7 @@ template <typename ParserT, typename FuncT, typename OutValueT>
 struct MapParser {
   // 変換後の型を、このパーサーの value_type として公開する
   typedef OutValueT value_type;
-  
+
   ParserT p;
   FuncT f; // 変換処理を行う関数オブジェクト
 
@@ -497,6 +502,44 @@ struct MapParser {
     return ParseResult<Iterator, OutValueT>(false, OutValueT(), it);
   }
 };
+
+// データの形式の失敗判定を関数に移譲する
+template <typename ParserT, typename FuncT, typename OutValueT>
+struct TryMapParser {
+  typedef OutValueT value_type;
+  ParserT p;
+
+  // この関数は
+  // ```
+  // std::pairstd::pair<bool /*
+  //  true => success 
+  //  false => fail */, OutValueT> functor(typename ParserT::value_type)
+  // ```
+  // のプロトタイプを要求する
+  FuncT f;
+
+  TryMapParser(const ParserT& parser, FuncT func) : p(parser), f(func) {}
+
+  template <typename Iterator>
+  ParseResult<Iterator, OutValueT> parse(Iterator it, Iterator end) const {
+    ParseResult<Iterator, typename ParserT::value_type> res = p.parse(it, end);
+
+    if (res.success) {
+      std::pair<bool /*
+        true => success 
+        false => fail */, OutValueT> v = f(res.value);
+      if (v.first) {
+        return ParseResult<Iterator, OutValueT>(true, v.second, res.next);
+      }
+    }
+    return ParseResult<Iterator, OutValueT>(false, OutValueT(), it);
+  }
+};
+
+template <typename OutValueT, typename ParserT, typename FuncT>
+TryMapParser<ParserT, FuncT, OutValueT> trymap_p(const ParserT& p, FuncT f) {
+  return TryMapParser<ParserT, FuncT, OutValueT>(p, f);
+}
 
 template <typename ParserT>
 struct OptParser {
@@ -520,6 +563,43 @@ struct OptParser {
 template <typename ParserT> 
 OptParser<ParserT> opt_p(const ParserT& p) {
   return OptParser<ParserT>(p);
+}
+
+template <typename ParserT, std::size_t Min, std::size_t Max>
+struct RangeParser {
+  typedef std::vector<typename ParserT::value_type> value_type;
+  ParserT p;
+
+  RangeParser (const ParserT& parser): p(parser) {}
+
+  template<typename Iterator>
+  ParseResult<Iterator, value_type> parse(Iterator it, Iterator end) const {
+    value_type results;
+    Iterator current = it;
+    std::size_t count = 0;
+
+    while (current != end && count < Max) {
+      ParseResult<Iterator, typename ParserT::value_type> res = this->p.parse(current, end);
+      if (!res.success)
+        break;
+      if (current == res.next)
+        break;
+      results.push_back(res.value);
+      current = res.next;
+      count += 1;
+    }
+
+    if (Min <= count) {
+      return ParseResult<Iterator, value_type>(true, results, current);
+    } else {
+      return ParseResult<Iterator, value_type>(false, value_type(), it);
+    }
+  }
+};
+
+template <std::size_t Min, std::size_t Max, typename ParserT>
+RangeParser<ParserT, Min, Max> range_p(const ParserT& parser) {
+  return RangeParser<ParserT, Min, Max>(parser);
 }
 
 // 使いやすくするためのヘルパー関数
