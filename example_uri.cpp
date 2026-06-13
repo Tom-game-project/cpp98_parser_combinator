@@ -1,6 +1,7 @@
 #include "parser_combinator.hpp"
 #include <cstddef>
 #include <cstdlib>
+#include <ostream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -249,7 +250,6 @@ int main() {
 
   // host          = IP-literal / IPv4address / reg-name
 
-
   // IP-literal = "[" ( IPv6address / IPvFuture ) "]"
 
   // IPv6address =                            6( h16 ":" ) ls32
@@ -306,7 +306,6 @@ int main() {
   //             / "1" 2DIGIT            ; 100-199
   //             / "2" %x30-34 DIGIT     ; 200-249
   //             / "25" %x30-35          ; 250-255
-
   typedef TryMapParser<RangeParser<PSomeCharP, 1, 4>, CheckRangeAndToString, std::string> DecOctetTM; // try map
 
   // IPv4address = dec-octet "." dec-octet "." dec-octet "." dec-octet
@@ -388,7 +387,7 @@ int main() {
     AuthorityLineM,
     OrParser<
       PathAbsoluteM,
-      PathRootlessM
+      OrParser<PathRootlessM, StrP> 
     > > HierPartP;
 
   // URI           = scheme ":" hier-part [ "?" query ] [ "#" fragment ]
@@ -402,11 +401,12 @@ int main() {
   // URI = scheme ":" hier-part [ "?" query ] [ "#" fragment ]
   typedef ThenParser<
     SchemeM, 
-    ThenParser<
-      CharP,
+    IgnoreThenParser<
       ThenParser<
         HierPartP,
-        OptParser<QueryM> > > > URIP;
+        OptParser<QueryM> >, 
+      CharP
+    > > URIP;
 
   // --- impl ---
 
@@ -504,7 +504,7 @@ int main() {
   PathNoschemeM path_noscheme_m = map_p<std::string>(path_noscheme_p, StringStringToString());
   PathRootlessM path_rootless_m = map_p<std::string>(path_rootless_p, StringStringToString());
 
-  HierPartP hier_part_p = or_p(authority_line_m, or_p(path_absolute_m, path_rootless_m));
+  HierPartP hier_part_p = or_p(authority_line_m, or_p(path_absolute_m, or_p(path_rootless_m, StrP(""))));
 
   SchemeP scheme_p = then_p(alpha_p, many(scheme_char_p));
   SchemeM scheme_m = map_p<std::string>(scheme_p, CharVecCharToString());
@@ -517,55 +517,46 @@ int main() {
   URIP uri_p = 
     then_p(
       scheme_m,
-      then_p(
-        CharP(':'), 
+      ignorethen_p(
         then_p(
           hier_part_p,
           opt_p(
               query_m
             )
-          )
+          ),
+          CharP(':')
         )
       );
 
   // --- test ---
   {
-    std::string test00_string = "0001";
+    std::string test_cases[] = {
+      "scheme:?",
+      "api://localhost/v1/users?url=http://example.com/path?q=1",
+      "ftp://!$&'()*+,;=%20:0/",
+      "mailto:test.user@example.org?subject=hello&body=test",
+      "http://:/path?"
+    };
 
-    std::string::const_iterator it = test00_string.begin();
-    std::string::const_iterator end = test00_string.end();
+    std::size_t array_length = sizeof(test_cases) / sizeof(test_cases[0]);
+    for (std::size_t i = 0; i < array_length; i++) {
 
-    ParseResult<Iter, std::string> res = dec_octet_tm.parse(it, end);
+      std::cout << "--- test " << i << "---" << std::endl;
+      std::cout << "input: \"" << test_cases[i] << "\"" << std::endl;
+      std::string::const_iterator it = test_cases[i].begin();
+      std::string::const_iterator end = test_cases[i].end();
 
-    if (res.success) {
+      ParseResult<Iter, std::pair<std::string, std::pair<std::string, std::string> > > res = uri_p.parse(it, end);
 
-      std::cout << res.value << std::endl;
-    } else {
-      std::cout << "failed to parse" << std::endl;
-    }
-  }
+      if (res.success) {
+        // res.value;
 
-  {
-    // std::string test_string = "scheme:?"; // TODO empty 未対応
-    // std::string test_string = "api://localhost/v1/users?url=http://example.com/path?q=1";
-    // std::string test_string = "ftp://!$&'()*+,;=%20:0/";
-    std::string test_string = "mailto:test.user@example.org?subject=hello&body=test";
-    // std::string test_string = "http://:/path?";
-
-    std::string::const_iterator it = test_string.begin();
-    std::string::const_iterator end = test_string.end();
-
-    ParseResult<Iter, std::pair<std::string, std::pair<char, std::pair<std::string, std::string> > > > res = uri_p.parse(it, end);
-
-    if (res.success) {
-      // res.value;
-
-      std::cout << res.value.first << std::endl;
-      std::cout << res.value.second.first << std::endl;
-      std::cout << res.value.second.second.first << std::endl;
-      std::cout << res.value.second.second.second << std::endl;
-    } else {
-      std::cout << "failed to parse" << std::endl;
+        std::cout << "scheme      : " << res.value.first << std::endl;
+        std::cout << "hier_part_p : " << res.value.second.first << std::endl;
+        std::cout << "query       : " << res.value.second.second << std::endl;
+      } else {
+        std::cout << "failed to parse" << std::endl;
+      }
     }
   }
 }
