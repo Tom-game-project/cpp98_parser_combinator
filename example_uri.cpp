@@ -93,6 +93,12 @@ bool is_obs_text(const char c) {
   return uc >= 0x80 /* && uc <= 0xFF */ ; // unsigned charなので 0xFF 以下は常に真ですが明示的に記述
 }
 
+//  scheme        = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
+bool is_scheme_char(const char c) {
+  unsigned char uc = static_cast<unsigned char>(c);
+  return is_alpha(uc) || is_digit(uc) || uc == '+' || uc == '-' || uc == '.';
+}
+
 // --- functor ---
 
 struct CharToString {
@@ -118,7 +124,7 @@ struct PSomeCharPToString {
 };
 
 struct PctEncodedPToString {
-  std::string operator()(const std::pair<char, std::pair<char, char> > v) const {
+  std::string operator()(const std::pair<char, std::pair<char, char> >& v) const {
     char arr[3] = {v.first, v.second.first, v.second.second};
     std::string s(arr, 3);
     return s;
@@ -126,7 +132,7 @@ struct PctEncodedPToString {
 };
 
 struct CheckRangeAndToString {
-  std::pair<bool, std::string> operator()(const std::vector<char> v) const {
+  std::pair<bool, std::string> operator()(const std::vector<char>& v) const {
     std::string rstr(v.begin(), v.end());
     long n = std::strtol(rstr.c_str(), NULL, 10);
     if (0 < n && n < 256) {
@@ -139,7 +145,7 @@ struct CheckRangeAndToString {
 // MapParser<ThenParser<SegmentNzM, ManyParser<ThenParser<CharP /* `/` */, SegmentM> > >, PathAbsoluteHelper, std::string>
 // ThenParser<SegmentNzM, ManyParser<ThenParser<CharP /* `/` */, SegmentM> > >,
 struct PathAbsoluteHelper {
-  std::string operator()(const std::pair<std::string, std::vector<std::pair<char, std::string> > > v) const {
+  std::string operator()(const std::pair<std::string, std::vector<std::pair<char, std::string> > >& v) const {
     std::string rstr = v.first;
     for (std::size_t i = 0; i < v.second.size(); i++) {
       rstr.push_back(v.second[i].first);
@@ -151,7 +157,7 @@ struct PathAbsoluteHelper {
 
 // // path-noscheme = segment-nz-nc *( "/" segment )
 struct VecCharStringToString {
-  std::string operator()(const std::vector<std::pair<char, std::string> > v) const {
+  std::string operator()(const std::vector<std::pair<char, std::string> >& v) const {
     std::string rstr;
     for (std::size_t i = 0; i < v.size(); i++) {
       rstr.push_back(v[i].first);
@@ -162,8 +168,61 @@ struct VecCharStringToString {
 };
 
 struct IPv4addressPToString {
-  std::string operator()(const std::pair<std::string, std::pair<std::string, std::pair<std::string, std::string> > > v) const {
+  std::string operator()(const std::pair<std::string, std::pair<std::string, std::pair<std::string, std::string> > >& v) const {
     return v.first + "." + v.second.first + "." + v.second.second.first + "." + v.second.second.second;
+  }
+};
+
+// typedef ThenParser<HostP, OptParser<MapParser<ThenParser<CharP /* `:` */, PortM>, AuthorityPHelper, std::string> > > AuthorityP;
+struct CharStringToString {
+  std::string operator()(const std::pair<char, std::string>& v) const {
+    std::string rstr(1, v.first);
+    rstr += v.second;
+    return rstr;
+  }
+};
+
+struct StringStringToString {
+  std::string operator()(const std::pair<std::string, std::string>& v) const {
+    std::string rstr = v.first;
+    rstr += v.second;
+    return rstr;
+  }
+};
+
+struct AuthorityLineHelper {
+  std::string operator()(const std::pair<std::string, std::pair<std::string, std::string> >& v) const {
+    return v.first + v.second.first + v.second.second;
+  }
+};
+
+struct CharVecCharToString {
+  std::string operator()(const std::pair<char, std::vector<char> >& v) const {
+    std::string head(1, v.first);
+    std::string tail(v.second.begin(), v.second.end());
+    return head + tail;
+  }
+};
+
+struct VecStringToString {
+  std::string operator()(const std::vector<std::string>& v) const {
+    std::string rstr;
+    for (std::size_t i = 0; i < v.size(); i++) {
+      rstr += v[i];
+    }
+    return rstr;
+  }
+};
+
+// typedef ManyParser<ThenParser<StrP /* `/` */, SegmentM> > PathAbemptyP;
+struct VecStrStrToString {
+  std::string operator()(const std::vector<std::pair<std::string, std::string> >& v) const {
+    std::string rstr;
+    for (std::size_t i = 0; i < v.size(); i++) {
+      rstr += v[i].first;
+      rstr += v[i].second;
+    }
+    return rstr;
   }
 };
 
@@ -177,7 +236,6 @@ int main() {
   // 文字を文字列として扱うコンビネーター
   typedef MapParser<PSomeCharP, CharToString, std::string> CharToStringP;
 
-  typedef MapParser<PSomeCharP, PSomeCharPToString, std::string> PSomeStringM;
 
   typedef ManyParser<PSomeCharP> PortP;
   typedef MapParser<PortP, VecCharToString, std::string> PortM;
@@ -185,22 +243,12 @@ int main() {
   //  scheme        = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
   typedef ThenParser<
     PSomeCharP /* `ALPHA` */, 
-    ManyParser<ChoiceParser<PSomeCharP> /* `*( ALPHA / DIGIT / "+" / "-" / "." )`*/ > > SchemeP; // TODO OrParserを使ってもいいかもしれない
+    ManyParser<PSomeCharP /* `*( ALPHA / DIGIT / "+" / "-" / "." )`*/ > > SchemeP; // TODO OrParserを使ってもいいかもしれない
 
-  // typedef MapParser<SchemeP, , std::string> SchemeM;
+  typedef MapParser<SchemeP, CharVecCharToString, std::string> SchemeM;
 
-  // userinfoは処理しない
-  // authority     = [ userinfo "@" ] host [ ":" port ]
-  //
   // host          = IP-literal / IPv4address / reg-name
 
-  // reg-name    = *( unreserved / pct-encoded / sub-delims )
-
-  typedef 
-    ManyParser<
-      OrParser<PSomeCharP /* unreserved */, 
-        OrParser<PSomeCharP /* pct-encoded */, PSomeCharP /* sub-delims */> > > RegNameP;
-  typedef MapParser<RegNameP, VecCharToString, std::string> RegNameM;
 
   // IP-literal = "[" ( IPv6address / IPvFuture ) "]"
 
@@ -229,22 +277,30 @@ int main() {
 
   typedef MapParser<PctEncodedP, PctEncodedPToString, std::string> PctEncodedM;
 
+  // reg-name    = *( unreserved / pct-encoded / sub-delims )
+
+  typedef 
+    ManyParser<
+      OrParser<CharToStringP /* unreserved */, 
+        OrParser<PctEncodedM /* pct-encoded */, CharToStringP /* sub-delims */> > > RegNameP;
+  typedef MapParser<RegNameP, VecStringToString, std::string> RegNameM;
+  
+  // typedef MapParser<PSomeCharP, PSomeCharPToString, std::string> PSomeStringM;
   // userinfo      = *( unreserved / pct-encoded / sub-delims / ":" )
-  typedef ManyParser<
-    OrParser<
-      PSomeStringM /* `unreserved` */, 
-      OrParser<
-        PctEncodedM /*`pct-encoded`*/, 
-        OrParser<
-          PSomeStringM /* sub-delim */,
-          StrP /* `:` */> > > > UserInfoP;
+  // typedef ManyParser<
+  //   OrParser<
+  //     PSomeStringM /* `unreserved` */, 
+  //     OrParser<
+  //       PctEncodedM /*`pct-encoded`*/, 
+  //       OrParser<
+  //         PSomeStringM /* sub-delim */,
+  //         StrP /* `:` */> > > > UserInfoP;
 
   // h16         = 1*4HEXDIG
   //             ; 16 bits of address represented in hexadecimal
-  typedef RangeParser<PSomeCharP, 1, 4> H16P; // 最小 1 回、最大 4 回の繰り返し
-  typedef MapParser<H16P, VecCharToString, std::string> H16M;
+  // typedef RangeParser<PSomeCharP, 1, 4> H16P; // 最小 1 回、最大 4 回の繰り返し
+  // typedef MapParser<H16P, VecCharToString, std::string> H16M;
 
-  // 
   // dec-octet   = DIGIT                 ; 0-9
   //             / %x31-39 DIGIT         ; 10-99
   //             / "1" 2DIGIT            ; 100-199
@@ -265,9 +321,7 @@ int main() {
   typedef MapParser<IPv4addressP, IPv4addressPToString, std::string> IPv4addressM;
 
   typedef OrParser<IPv4addressM, RegNameM> HostP; // TODO IP-literal 未対応
-
-  typedef ThenParser<HostP, OptParser<ThenParser<CharP, PortM> > > AuthorityP;
-
+                                                  // return std::string
 
   // segment       = *pchar
   typedef ManyParser<PSomeCharP> SegmentP;
@@ -281,8 +335,15 @@ int main() {
   //               ; non-zero-length segment without any colon ":"
   typedef Many1Parser<OrParser<CharToStringP, OrParser<PctEncodedM, OrParser<CharToStringP, StrP> > > > SegmentNzNcP; // return string
 
+  // userinfoは処理しない
+  // authority     = [ userinfo "@" ] host [ ":" port ]
+  typedef ThenParser<HostP, OptParser<MapParser<ThenParser<CharP /* `:` */, PortM>, CharStringToString, std::string> > > AuthorityP;
+  typedef MapParser<AuthorityP, StringStringToString, std::string> AuthorityM;
   // path-abempty  = *( "/" segment )
-  typedef ManyParser<ThenParser<CharP /* `/` */, SegmentM> > PathAbemptyP;
+  typedef ManyParser<ThenParser<StrP /* `/` */, SegmentM> > PathAbemptyP;
+  typedef MapParser<PathAbemptyP, VecStrStrToString, std::string> PathAbemptyM;
+
+  typedef MapParser<ThenParser<StrP /* `//` */, ThenParser<AuthorityM, PathAbemptyM> >, AuthorityLineHelper, std::string> AuthorityLineM;
 
   // path-absolute = "/" [ segment-nz *( "/" segment ) ]
   //
@@ -295,7 +356,7 @@ int main() {
           ManyParser<
             ThenParser<
               CharP /* `/` */, SegmentM> > >, PathAbsoluteHelper, std::string> > > PathAbsoluteP;
-
+  typedef MapParser<PathAbsoluteP, CharStringToString, std::string> PathAbsoluteM;
   // helper type
   // *( "/" segment )
   // -> std::string
@@ -304,15 +365,15 @@ int main() {
         VecCharStringToString,
         std::string
     > CharSegmentBundleM;
-
   // path-noscheme = segment-nz-nc *( "/" segment )
   typedef 
     ThenParser<
       SegmentNzNcP, // string
       CharSegmentBundleM> PathNoschemeP;
-
+  typedef MapParser<PathNoschemeP, StringStringToString, std::string> PathNoschemeM;
   // path-rootless = segment-nz *( "/" segment )
   typedef ThenParser<SegmentNzM, CharSegmentBundleM> PathRootlessP;
+  typedef MapParser<PathRootlessP, StringStringToString, std::string> PathRootlessM;
 
   // path-empty
 
@@ -320,8 +381,32 @@ int main() {
   //                / path-absolute
   //                / path-rootless
   //                / path-empty
+  //
+  // "//" authority path-abemptyのところをauthority lineとする
 
-  // typedef OrParser<, OrParser<, OrParser<, > > > HierPartP;
+  typedef OrParser<
+    AuthorityLineM,
+    OrParser<
+      PathAbsoluteM,
+      PathRootlessM
+    > > HierPartP;
+
+  // URI           = scheme ":" hier-part [ "?" query ] [ "#" fragment ]
+  // query = *( pchar / "/" / "?" )
+  typedef 
+    ThenParser<CharP /* `?` */, ManyParser<
+      OrParser<PSomeCharP /* pchar */, OrParser<CharP /* `/` */ , CharP /* `?` */> >
+    > > QueryP;
+  typedef MapParser<QueryP, CharVecCharToString, std::string> QueryM;
+
+  // URI = scheme ":" hier-part [ "?" query ] [ "#" fragment ]
+  typedef ThenParser<
+    SchemeM, 
+    ThenParser<
+      CharP,
+      ThenParser<
+        HierPartP,
+        OptParser<QueryM> > > > URIP;
 
   // --- impl ---
 
@@ -330,9 +415,8 @@ int main() {
   PSomeCharP pchar_p = pred_p<Iter>(is_pchar_base);
   PSomeCharP unreserved_p = pred_p<Iter>(is_unreserved);
   PSomeCharP sub_delim_p = pred_p<Iter>(is_sub_delims);
-
-  H16P h16_p = range_p<1, 4>(hexdig_p);
-  H16M h16_m = map_p<std::string>(h16_p, VecCharToString());
+  PSomeCharP scheme_char_p = pred_p<Iter>(is_scheme_char);
+  PSomeCharP alpha_p = pred_p<Iter>(is_alpha);
 
   SegmentP segment_p = many(pchar_p);
   SegmentM segment_m = map_p<std::string>(segment_p, VecCharToString());
@@ -365,11 +449,11 @@ int main() {
 
   IPv4addressP ipv4address_p = 
     then_p(
-      thenignore_p(dec_octet_tm, CharP(':')),
+      thenignore_p(dec_octet_tm, CharP('.')),
         then_p(
-          thenignore_p(dec_octet_tm, CharP(':')),
+          thenignore_p(dec_octet_tm, CharP('.')),
             then_p(
-              thenignore_p(dec_octet_tm, CharP(':')), 
+              thenignore_p(dec_octet_tm, CharP('.')), 
               dec_octet_tm
         )
       )
@@ -380,7 +464,8 @@ int main() {
   CharSegmentBundleM char_segment_bundle_m = map_p<std::string>(
       many(then_p(CharP('/'), segment_m)), VecCharStringToString());
 
-  PathAbemptyP path_abempty_p = many(then_p(CharP('/'), segment_m));
+  PathAbemptyP path_abempty_p = many(then_p(StrP("/"), segment_m));
+  PathAbemptyM path_abempty_m = map_p<std::string>(path_abempty_p, VecStrStrToString());
 
   PathAbsoluteP path_absolute_p = then_p(
       CharP('/'), 
@@ -399,9 +484,53 @@ int main() {
 
   PathRootlessP path_rootless_p = then_p(segment_nz_m, char_segment_bundle_m);
 
+  RegNameP reg_name_p = many(or_p(unreserved_m, or_p(pct_encoded_m, sub_delim_m)));
+  RegNameM reg_name_m = map_p<std::string>(reg_name_p, VecStringToString());
+  HostP host_p = or_p(ipv4address_m, reg_name_m);
+  AuthorityP authority_p = then_p(
+    host_p,
+    opt_p(
+      map_p<std::string>(then_p(CharP(':'), port_m), CharStringToString())
+    )
+  );
+  AuthorityM authority_m = map_p<std::string>(authority_p, StringStringToString());
+
+  AuthorityLineM authority_line_m = map_p<std::string>(
+      then_p(
+        StrP("//"), 
+        then_p(authority_m, path_abempty_m)),
+      AuthorityLineHelper());
+  PathAbsoluteM path_absolute_m = map_p<std::string>(path_absolute_p, CharStringToString());
+  PathNoschemeM path_noscheme_m = map_p<std::string>(path_noscheme_p, StringStringToString());
+  PathRootlessM path_rootless_m = map_p<std::string>(path_rootless_p, StringStringToString());
+
+  HierPartP hier_part_p = or_p(authority_line_m, or_p(path_absolute_m, path_rootless_m));
+
+  SchemeP scheme_p = then_p(alpha_p, many(scheme_char_p));
+  SchemeM scheme_m = map_p<std::string>(scheme_p, CharVecCharToString());
+
+  QueryP query_p = then_p(CharP('?'), many(or_p(pchar_p, or_p(CharP('/'), CharP('?')))));
+  QueryM query_m = map_p<std::string>(query_p, CharVecCharToString());
+
+  // URI           = scheme ":" hier-part [ "?" query ] [ "#" fragment ]
+  // typedef ThenParser<SchemeM, ThenParser<CharP, ThenParser<HierPartP, OptParser<ThenParser<CharP, QueryP> > > > > URIP;
+  URIP uri_p = 
+    then_p(
+      scheme_m,
+      then_p(
+        CharP(':'), 
+        then_p(
+          hier_part_p,
+          opt_p(
+              query_m
+            )
+          )
+        )
+      );
+
   // --- test ---
   {
-    std::string test00_string = "0000";
+    std::string test00_string = "0001";
 
     std::string::const_iterator it = test00_string.begin();
     std::string::const_iterator end = test00_string.end();
@@ -417,7 +546,27 @@ int main() {
   }
 
   {
+    // std::string test_string = "scheme:?"; // TODO empty 未対応
+    // std::string test_string = "api://localhost/v1/users?url=http://example.com/path?q=1";
+    // std::string test_string = "ftp://!$&'()*+,;=%20:0/";
+    std::string test_string = "mailto:test.user@example.org?subject=hello&body=test";
+    // std::string test_string = "http://:/path?";
 
+    std::string::const_iterator it = test_string.begin();
+    std::string::const_iterator end = test_string.end();
+
+    ParseResult<Iter, std::pair<std::string, std::pair<char, std::pair<std::string, std::string> > > > res = uri_p.parse(it, end);
+
+    if (res.success) {
+      // res.value;
+
+      std::cout << res.value.first << std::endl;
+      std::cout << res.value.second.first << std::endl;
+      std::cout << res.value.second.second.first << std::endl;
+      std::cout << res.value.second.second.second << std::endl;
+    } else {
+      std::cout << "failed to parse" << std::endl;
+    }
   }
 }
 
