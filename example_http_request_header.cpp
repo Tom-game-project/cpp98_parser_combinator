@@ -28,6 +28,8 @@ struct RequestLine {
   std::string request_target;
   std::string protocol;
 
+  RequestLine() {}
+
   RequestLine(
     std::string method,
     std::string request_target,
@@ -60,7 +62,7 @@ struct FieldContentPToString {
 };
 
 struct FieldValuePToString {
-  std::string operator()(const std::vector<std::string> v) const {
+  std::string operator()(const std::vector<std::string>& v) const {
     std::string rstr;
     for (std::size_t i = 0; i < v.size(); i++) {
       rstr += v[i];
@@ -70,7 +72,7 @@ struct FieldValuePToString {
 };
 
 struct OptionalTailToVecChar {
-  std::vector<char> operator() (const std::vector<std::pair<std::vector<char>, char> > v) const {
+  std::vector<char> operator() (const std::vector<std::pair<std::vector<char>, char> >& v) const {
     std::vector<char> rvec;
 
     for (std::size_t i = 0; i < v.size(); i++) {
@@ -78,6 +80,19 @@ struct OptionalTailToVecChar {
       rvec.push_back(v[i].second);
     }
     return rvec;
+  }
+};
+
+// typedef IgnoreThenParser<ThenParser<ThenIgnoreParser<DigitM, CharP/*.*/>, DigitM>, IgnoreThenParser<HttpNameP, CharP> > HttpVersionP;
+struct HttpVersionPToString {
+  std::string operator()(const std::pair<std::string, std::string>& v) const {
+    return "HTTP/" + v.first + "." + v.second;
+  }
+};
+
+struct RequestLinePToRequestLine {
+  RequestLine operator()(const std::pair<std::string, std::pair<std::string, std::string> >& v) const {
+    return RequestLine(v.first, v.second.first, v.second.second);
   }
 };
 
@@ -104,8 +119,8 @@ bool is_digit(const char c) {
 bool is_tchar(const char c) {
   unsigned char uc = static_cast<unsigned char>(c);
   return 
-    std::isdigit(c) != 0 ||
-    std::isalpha(c) != 0 ||
+    std::isdigit(uc) != 0 ||
+    std::isalpha(uc) != 0 ||
     uc == '!' ||
     uc == '#' ||
     uc == '$' ||
@@ -123,7 +138,11 @@ bool is_tchar(const char c) {
     uc == '~';
 }
 
-
+// not space or tab
+bool is_not_space(const char c) {
+  unsigned char uc = static_cast<unsigned char>(c);
+  return uc != ' ' && uc != '\t';
+}
 
 //
 int main () {
@@ -178,13 +197,13 @@ int main () {
   typedef MapParser<FieldContentP, FieldContentPToString, std::string> FieldContentM;
 
   typedef ManyParser<FieldContentM> FieldValueP;                                        // field-value
-  typedef Many1Parser<PSomeCharP> FieldNameP;                                           // token = 1*tchar
+  typedef Many1Parser<PSomeCharP> TokenP;                                           // token = 1*tchar
 
   typedef MapParser<FieldValueP, FieldValuePToString, std::string> FieldValueM;
-  typedef MapParser<FieldNameP, VecCharToString, std::string> FieldNameM;
+  typedef MapParser<TokenP, VecCharToString, std::string> TokenM;
 
   //   field-line   = field-name ":" OWS field-value OWS
-  typedef ThenParser<ThenIgnoreParser<FieldNameM, CharP /*:*/>, PaddedParser<FieldValueM, ManyParser<PSomeCharP> /* OWS */ > > FieldLineP;
+  typedef ThenParser<ThenIgnoreParser<TokenM, CharP /*:*/>, PaddedParser<FieldValueM, ManyParser<PSomeCharP> /* OWS */ > > FieldLineP;
 
   typedef ThenIgnoreParser<ManyParser<ThenIgnoreParser<FieldLineP, CRLFP> >, CRLFP>  FieldLinesP;
 
@@ -208,10 +227,27 @@ int main () {
   typedef MapParser<DigitP, VecCharToString, std::string> DigitM;
 
   typedef IgnoreThenParser<ThenParser<ThenIgnoreParser<DigitM, CharP/*.*/>, DigitM>, ThenParser<HttpNameP, CharP> > HttpVersionP;
+  typedef MapParser<HttpVersionP, HttpVersionPToString, std::string> HttpVersionM;
+
+  typedef MapParser<Many1Parser<PredicateCharParser<Iter> >, VecCharToString, std::string> RequestTargetM;
+
+  // request-line = method SP request-target SP HTTP-version
+  typedef ThenParser<
+    TokenM,
+    IgnoreThenParser<
+      ThenParser<
+        ThenIgnoreParser<RequestTargetM, CharP>
+        , HttpVersionM>,
+    CharP> > RequestLineP;
+  typedef MapParser<RequestLineP, RequestLinePToRequestLine, RequestLine> RequestLineM;
+
+  // HTTP-message = start-line CRLF *( field-line CRLF ) CRLF [ message-body ]
+  typedef ThenParser<RequestLineM, IgnoreThenParser<FieldLinesP, CRLFP > > HttpMessageP;
 
   PSomeCharP field_vchar_p = PredicateCharParser<Iter>(is_field_vchar);
   PSomeCharP ows_p = PredicateCharParser<Iter>(is_ows);
   PSomeCharP tchar_p = PredicateCharParser<Iter>(is_tchar);
+  PSomeCharP no_space_p = PredicateCharParser<Iter>(is_not_space);
 
   CRLFP crlf_p = or_p(str<Iter>("\r\n"), str<Iter>("\n"));
 
@@ -224,6 +260,7 @@ int main () {
   HttpVersionP http_version_p = ignorethen_p(
       then_p(thenignore_p(digit_m, CharP('.')), digit_m),
       then_p(http_name_p, CharP('/')));
+  HttpVersionM http_version_m = map_p<std::string>(http_version_p, HttpVersionPToString());
 
   FieldContentP field_content_p = then_p(
       field_vchar_p,
@@ -239,15 +276,90 @@ int main () {
   FieldValueP field_value_p = many(field_content_m);
   FieldValueM field_value_m = map_p<std::string>(field_value_p, FieldValuePToString());
 
-  FieldNameP field_name_p = many1(tchar_p); 
-  FieldNameM field_name_m = map_p<std::string>(field_name_p, VecCharToString()); // token
-                                                                                       // methodとしても使える
+  TokenP token_p = many1(tchar_p); 
+  TokenM token_m = map_p<std::string>(token_p, VecCharToString()); // token
+                                                                         // methodとしても使える
 
-  FieldLineP field_line_p = then_p(thenignore_p(field_name_m, CharP(':')), padded_p(field_value_m, many(ows_p)));
+  FieldLineP field_line_p = then_p(thenignore_p(token_m, CharP(':')), padded_p(field_value_m, many(ows_p)));
   FieldLinesP field_lines_p = 
     thenignore_p(many(thenignore_p(field_line_p, crlf_p)), crlf_p);
 
+  RequestTargetM request_target_m = map_p<std::string>(many1(no_space_p), VecCharToString());
+
+  RequestLineP request_line_p = then_p(
+    token_m,
+    ignorethen_p(
+      then_p(
+        thenignore_p(request_target_m, CharP(' ')),
+        http_version_m),
+      CharP(' '))
+  );
+  RequestLineM request_line_m = map_p<RequestLine>(request_line_p, RequestLinePToRequestLine());
+  HttpMessageP http_message_p = then_p(request_line_m, ignorethen_p(field_lines_p, crlf_p));
+
   // --- test ---
+
+  {
+    std::cout << "--- test http_message_p ---" << std::endl;
+    Iter it = request_header.begin();
+    Iter end = request_header.end();
+
+    ParseResult<
+      Iter,
+      std::pair<
+        RequestLine, 
+        std::vector<std::pair<std::string, std::string> > >
+    > res = http_message_p.parse(it, end);
+
+    if (res.success) {
+      std::cout << "method        : " << res.value.first.method << std::endl;
+      std::cout << "request_target: " << res.value.first.request_target << std::endl;
+      std::cout << "protocol      : " << res.value.first.protocol << std::endl;
+      for (std::size_t i = 0; i < res.value.second.size(); i++) {
+        std::pair<std::string, std::string> pair = res.value.second[i];
+        std::cout << "\"" << pair.first << "\"" << ": " << "\"" << pair.second << "\"" << std::endl;
+      }
+    } else {
+      std::cout << "failed to parse" << std::endl;
+    }
+  }
+
+  {
+    std::cout << "--- test request_line_m ---" << std::endl;
+    std::string test_case = 
+      "POST /users HTTP/1.1";
+
+    Iter it = test_case.begin();
+    Iter end = test_case.end();
+
+    ParseResult<Iter, RequestLine> res = request_line_m.parse(it, end);
+
+    if (res.success) {
+      std::cout << "method        : " << res.value.method << std::endl;
+      std::cout << "request_target: " << res.value.request_target << std::endl;
+      std::cout << "protocol      : " << res.value.protocol << std::endl;
+    } else {
+      std::cout << "failed to parse" << std::endl;
+    }
+  }
+
+  {
+    std::cout << "--- test http_version_m ---" << std::endl;
+
+    std::string test_case = 
+      "HTTP/1.1";
+
+    Iter it = test_case.begin();
+    Iter end = test_case.end();
+
+    ParseResult<Iter, std::string> res = http_version_m.parse(it, end);
+
+    if (res.success) {
+      std::cout << res.value << std::endl;
+    } else {
+      std::cout << "failed to parse" << std::endl;
+    }
+  }
 
   {
     std::cout << "--- test field_lines_p ---" << std::endl;
@@ -283,7 +395,7 @@ int main () {
     std::string field_name_string = "Hello";
     Iter it = field_name_string.begin();
     Iter end = field_name_string.end();
-    ParseResult<Iter, std::string > res = field_name_m.parse(it, end);
+    ParseResult<Iter, std::string > res = token_m.parse(it, end);
 
     if (res.success) {
       std::cout << res.value << std::endl;

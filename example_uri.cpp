@@ -248,26 +248,6 @@ int main() {
 
   typedef MapParser<SchemeP, CharVecCharToString, std::string> SchemeM;
 
-  // host          = IP-literal / IPv4address / reg-name
-
-  // IP-literal = "[" ( IPv6address / IPvFuture ) "]"
-
-  // IPv6address =                            6( h16 ":" ) ls32
-  //             /                       "::" 5( h16 ":" ) ls32
-  //             / [               h16 ] "::" 4( h16 ":" ) ls32
-  //             / [ *1( h16 ":" ) h16 ] "::" 3( h16 ":" ) ls32
-  //             / [ *2( h16 ":" ) h16 ] "::" 2( h16 ":" ) ls32
-  //             / [ *3( h16 ":" ) h16 ] "::"    h16 ":"   ls32
-  //             / [ *4( h16 ":" ) h16 ] "::"              ls32
-  //             / [ *5( h16 ":" ) h16 ] "::"              h16
-  //             / [ *6( h16 ":" ) h16 ] "::"
-
-  // IPvFuture     = "v" 1*HEXDIG "." 1*( unreserved / sub-delims / ":" )
-
-  // ls32        = ( h16 ":" h16 ) / IPv4address
-  //             ; least-significant 32 bits of address
-  //   
-
   // pct-encoded = "%" HEXDIG HEXDIG
   typedef ThenParser<
     CharP /* `%` */,
@@ -284,9 +264,9 @@ int main() {
       OrParser<CharToStringP /* unreserved */, 
         OrParser<PctEncodedM /* pct-encoded */, CharToStringP /* sub-delims */> > > RegNameP;
   typedef MapParser<RegNameP, VecStringToString, std::string> RegNameM;
-  
+
   // typedef MapParser<PSomeCharP, PSomeCharPToString, std::string> PSomeStringM;
-  // userinfo      = *( unreserved / pct-encoded / sub-delims / ":" )
+  // // userinfo      = *( unreserved / pct-encoded / sub-delims / ":" )
   // typedef ManyParser<
   //   OrParser<
   //     PSomeStringM /* `unreserved` */, 
@@ -298,8 +278,31 @@ int main() {
 
   // h16         = 1*4HEXDIG
   //             ; 16 bits of address represented in hexadecimal
-  // typedef RangeParser<PSomeCharP, 1, 4> H16P; // 最小 1 回、最大 4 回の繰り返し
-  // typedef MapParser<H16P, VecCharToString, std::string> H16M;
+  typedef RangeParser<PSomeCharP, 1, 4> H16P; // 最小 1 回、最大 4 回の繰り返し
+  typedef MapParser<H16P, VecCharToString, std::string> H16M;
+
+  // IP-literal = "[" ( IPv6address / IPvFuture ) "]"
+  // 
+  // IPvFuture     = "v" 1*HEXDIG "." 1*( unreserved / sub-delims / ":" )
+  // 
+  // IPv6address   =                            6( h16 ":" ) ls32
+  //               /                       "::" 5( h16 ":" ) ls32
+  //               / [               h16 ] "::" 4( h16 ":" ) ls32
+  //               / [ *1( h16 ":" ) h16 ] "::" 3( h16 ":" ) ls32
+  //               / [ *2( h16 ":" ) h16 ] "::" 2( h16 ":" ) ls32
+  //               / [ *3( h16 ":" ) h16 ] "::"    h16 ":"   ls32
+  //               / [ *4( h16 ":" ) h16 ] "::"              ls32
+  //               / [ *5( h16 ":" ) h16 ] "::"              h16
+  //               / [ *6( h16 ":" ) h16 ] "::"
+  //      
+  // 
+  // h16           = 1*4HEXDIG
+  // ls32          = ( h16 ":" h16 ) / IPv4address
+
+  // IPvFuture     = "v" 1*HEXDIG "." 1*( unreserved / sub-delims / ":" )
+  // typedef ThenParser<CharP /* `[` */, ThenParser<OrParser<typename Parser1, typename Parser2>, CharP /* `]` */> > IPLiteralP;
+  typedef ThenParser<CharP /*v*/, ThenParser<PSomeCharP /* HEXDIG */, ThenParser<CharP /* `.` */, OrParser<PSomeCharP /* unreserved */, OrParser<PSomeCharP /* sub-delims */, CharP /* `:`*/> > > > > IPvFutureP;
+  
 
   // dec-octet   = DIGIT                 ; 0-9
   //             / %x31-39 DIGIT         ; 10-99
@@ -531,11 +534,13 @@ int main() {
   // --- test ---
   {
     std::string test_cases[] = {
+      "http://a/b/c/d;p?q",
+      "http:",
       "scheme:?",
       "api://localhost/v1/users?url=http://example.com/path?q=1",
       "ftp://!$&'()*+,;=%20:0/",
       "mailto:test.user@example.org?subject=hello&body=test",
-      "http://:/path?"
+      "http://:/path?",
     };
 
     std::size_t array_length = sizeof(test_cases) / sizeof(test_cases[0]);
